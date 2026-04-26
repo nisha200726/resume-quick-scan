@@ -5,7 +5,7 @@ import { UploadCard } from "@/components/app/UploadCard";
 import { MatchRing } from "@/components/app/MatchRing";
 import { Button } from "@/components/ui/button";
 import { analyze, AnalysisResult, readFileAsText } from "@/lib/analyzer";
-import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen } from "lucide-react";
 
 export default function Candidate() {
   const [resume, setResume] = useState<File | null>(null);
@@ -45,7 +45,7 @@ Missing Skills (${result.missingSkills.length}):
 ${result.missingSkills.map(s => '  ✗ ' + s).join('\n') || '  (none)'}
 
 Suggested Skills to Learn:
-${result.suggestedSkills.map(s => '  → ' + s).join('\n') || '  (none)'}
+${result.suggestedSkills.map(s => '  → ' + s.name + (s.resource ? '  (' + s.resource + ')' : '')).join('\n') || '  (none)'}
 
 Feedback:
 ${result.feedback.map(f => '  • ' + f).join('\n')}
@@ -204,12 +204,34 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 </ul>
                 {result.suggestedSkills.length > 0 && (
                   <div className="mt-5 pt-5 border-t border-border">
-                    <p className="text-sm font-medium mb-2">Suggested skills to learn next:</p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-2 mb-3">
+                      <BookOpen className="h-4 w-4 text-primary-glow" />
+                      <p className="text-sm font-medium">Suggested skills to learn next</p>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2">
                       {result.suggestedSkills.map(s => (
-                        <span key={s} className="px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium capitalize">
-                          {s}
-                        </span>
+                        s.resource ? (
+                          <a
+                            key={s.name}
+                            href={s.resource}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-background hover:border-primary-glow/60 hover:shadow-soft transition"
+                          >
+                            <span className="text-sm font-medium capitalize truncate">{s.name}</span>
+                            <span className="flex items-center gap-1 text-xs text-primary-glow opacity-80 group-hover:opacity-100">
+                              Learn <ExternalLink className="h-3 w-3" />
+                            </span>
+                          </a>
+                        ) : (
+                          <div
+                            key={s.name}
+                            className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30"
+                          >
+                            <span className="text-sm font-medium capitalize truncate">{s.name}</span>
+                            <span className="text-xs text-muted-foreground">Add to resume</span>
+                          </div>
+                        )
                       ))}
                     </div>
                   </div>
