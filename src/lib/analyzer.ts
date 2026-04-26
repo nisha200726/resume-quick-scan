@@ -212,19 +212,19 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
 }
 
 async function extractPdf(file: File): Promise<string> {
-  // Dynamic import keeps initial bundle small
   const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
-  // Use a CDN worker to avoid bundler config
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  // Pin worker to the same version via CDN — most reliable in browser
+  const version = pdfjs.version || '5.6.205';
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
 
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const pdf = await pdfjs.getDocument({ data: buf, disableWorker: false }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map((it: any) => it.str).join(' ') + '\n';
+    text += content.items.map((it: any) => it.str || '').join(' ') + '\n';
   }
   return text;
 }
