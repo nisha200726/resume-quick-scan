@@ -173,9 +173,44 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
   };
 }
 
+async function extractPdf(file: File): Promise<string> {
+  // Dynamic import keeps initial bundle small
+  const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
+  // Use a CDN worker to avoid bundler config
+  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map((it: any) => it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+async function extractDocx(file: File): Promise<string> {
+  const mammoth: any = await import('mammoth/mammoth.browser');
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value || '';
+}
+
 export async function readFileAsText(file: File): Promise<string> {
   const ext = file.name.split('.').pop()?.toLowerCase();
-  if (ext === 'txt' || ext === 'md') return file.text();
+  try {
+    if (ext === 'txt' || ext === 'md') return await file.text();
+    if (ext === 'pdf') return await extractPdf(file);
+    if (ext === 'docx') return await extractDocx(file);
+    if (ext === 'doc') {
+      // Legacy .doc isn't reliably parseable in-browser; fall through to best-effort text
+    }
+  } catch (err) {
+    console.error('File parse failed, falling back to raw text:', err);
+  }
+  // Best-effort fallback: strip non-printable bytes
   const buf = await file.arrayBuffer();
   const bytes = new Uint8Array(buf);
   let str = '';
