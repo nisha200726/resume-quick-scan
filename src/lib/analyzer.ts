@@ -86,7 +86,7 @@ function extractSkills(text: string): Set<string> {
   return found;
 }
 
-// Fallback: pull notable JD-only keywords (capitalised tokens, multi-occurrence) the resume doesn't mention
+// Fallback: pull notable JD-only keywords (multi-occurrence, longer words) the resume doesn't mention
 function extractFallbackGaps(jdText: string, resumeText: string): string[] {
   const rTok = new Set(tokens(resumeText));
   const counts = new Map<string, number>();
@@ -95,10 +95,23 @@ function extractFallbackGaps(jdText: string, resumeText: string): string[] {
     if (rTok.has(t)) continue;
     counts.set(t, (counts.get(t) || 0) + 1);
   }
+  // Even single-occurrence is okay if JD is short — sort by frequency then length
   return [...counts.entries()]
-    .filter(([, n]) => n >= 2)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 10)
+    .map(([w]) => w);
+}
+
+// Pull JD-significant keywords (top words that look "topical") regardless of resume
+function extractJdKeywords(jdText: string): string[] {
+  const counts = new Map<string, number>();
+  for (const t of tokens(jdText)) {
+    if (t.length < 4) continue;
+    counts.set(t, (counts.get(t) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 15)
     .map(([w]) => w);
 }
 
@@ -123,27 +136,51 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
   const rSkills = extractSkills(resumeText);
   const jSkills = extractSkills(jdText);
 
+  const rTokSet = new Set(tokens(resumeText));
+  const jTok = tokens(jdText);
+
+  // --- Build a unified "required terms" set: dictionary skills + top JD keywords ---
+  const jdKeywords = extractJdKeywords(jdText);
+  const requiredTerms = new Set<string>([...jSkills, ...jdKeywords]);
+
+  // Matched / missing across the unified set
+  const matchedAll = [...requiredTerms].filter(t => rSkills.has(t) || rTokSet.has(t));
+  const missingAll = [...requiredTerms].filter(t => !rSkills.has(t) && !rTokSet.has(t));
+
+  // Skill-only buckets for display
   const matched = [...jSkills].filter(s => rSkills.has(s));
   let missing = [...jSkills].filter(s => !rSkills.has(s));
 
-  // If the JD has no recognized skills (or very few missing), fall back to keyword gaps
-  if (missing.length < 3) {
-    const fallback = extractFallbackGaps(jdText, resumeText);
-    for (const f of fallback) {
-      if (!missing.includes(f) && !rSkills.has(f)) missing.push(f);
-    }
+  // Always extend missing with fallback gaps so suggestions/roadmap are never empty
+  const fallback = extractFallbackGaps(jdText, resumeText);
+  for (const f of fallback) {
+    if (!missing.includes(f) && !rSkills.has(f) && !rTokSet.has(f)) missing.push(f);
   }
 
-  // Keyword overlap (broader)
-  const rTok = new Set(tokens(resumeText));
-  const jTok = tokens(jdText);
-  const overlap = jTok.filter(t => rTok.has(t)).length;
+  // --- Scoring (robust, never collapses to 0 just because no dict skills detected) ---
+  const overlap = jTok.filter(t => rTokSet.has(t)).length;
   const keywordOverlap = jTok.length ? Math.round((overlap / jTok.length) * 100) : 0;
 
-  const skillMatch = jSkills.size ? (matched.length / jSkills.size) * 100 : keywordOverlap;
-  const matchPercent = Math.round(skillMatch * 0.7 + keywordOverlap * 0.3);
+  // Unified term-coverage: how many of the JD's important terms appear in the resume
+  const termCoverage = requiredTerms.size
+    ? Math.round((matchedAll.length / requiredTerms.size) * 100)
+    : 0;
 
-  const rankScore = Math.min(100, Math.round(matchPercent * 0.85 + Math.min(rSkills.size, 20) * 0.75));
+  // Dictionary-skill match (only when JD has dict skills)
+  const skillMatch = jSkills.size
+    ? Math.round((matched.length / jSkills.size) * 100)
+    : termCoverage;
+
+  // Weighted blend — gives a reasonable score even when no dict skills are detected
+  const matchPercent = Math.max(
+    0,
+    Math.min(100, Math.round(skillMatch * 0.45 + termCoverage * 0.35 + keywordOverlap * 0.2))
+  );
+
+  const rankScore = Math.min(
+    100,
+    Math.round(matchPercent * 0.8 + Math.min(rSkills.size, 20) * 1.0)
+  );
 
   const suggested: SuggestedSkill[] = missing.slice(0, 8).map(name => ({
     name,
@@ -159,6 +196,7 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
   if (missing.length > 0) feedback.push(`Add experience or projects related to: ${missing.slice(0, 3).join(', ')}.`);
   if (rSkills.size < 5) feedback.push('Your resume mentions few recognizable technical skills. Be specific about tools used.');
   if (suggested.some(s => s.resource)) feedback.push('Click any suggested skill below to open a free learning resource.');
+  if (jSkills.size === 0) feedback.push('No standard skills were detected in the JD — score is based on overall keyword and term coverage.');
 
   return {
     matchPercent,
@@ -174,19 +212,19 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
 }
 
 async function extractPdf(file: File): Promise<string> {
-  // Dynamic import keeps initial bundle small
   const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
-  // Use a CDN worker to avoid bundler config
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  // Pin worker to the same version via CDN — most reliable in browser
+  const version = pdfjs.version || '5.6.205';
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
 
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const pdf = await pdfjs.getDocument({ data: buf, disableWorker: false }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map((it: any) => it.str).join(' ') + '\n';
+    text += content.items.map((it: any) => it.str || '').join(' ') + '\n';
   }
   return text;
 }
