@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Navbar } from "@/components/app/Navbar";
 import { UploadCard } from "@/components/app/UploadCard";
 import { MatchRing } from "@/components/app/MatchRing";
+import { Roadmap } from "@/components/app/Roadmap";
 import { Button } from "@/components/ui/button";
 import { analyze, AnalysisResult, readFileAsText } from "@/lib/analyzer";
 import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen } from "lucide-react";
@@ -237,6 +238,9 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                   </div>
                 )}
               </div>
+
+              {/* LEARNING ROADMAP */}
+              <Roadmap skills={result.suggestedSkills} />
 
               <div className="flex justify-end">
                 <Button onClick={downloadReport} className="bg-gradient-accent hover:opacity-90 shadow-glow">
