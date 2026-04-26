@@ -73,12 +73,81 @@ function normalize(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9+#./\s-]/g, ' ').replace(/\s+/g, ' ');
 }
 
+// Controlled synonym map: variant phrase -> canonical skill (must exist in SKILL_DICT)
+// Keys are matched as whole tokens/phrases (case-insensitive) and rewritten before extraction.
+const SYNONYMS: Record<string, string> = {
+  // React family
+  'react.js': 'react', 'reactjs': 'react', 'react js': 'react',
+  'react-native': 'react native', 'reactnative': 'react native',
+  // Node / JS
+  'node.js': 'nodejs', 'node js': 'node',
+  'next.js': 'nextjs', 'next js': 'nextjs',
+  'nuxt.js': 'vuejs', 'nuxtjs': 'vuejs',
+  'vue.js': 'vuejs', 'vue js': 'vuejs', 'vue': 'vuejs',
+  'angular.js': 'angular', 'angularjs': 'angular',
+  'js': 'javascript', 'ecmascript': 'javascript', 'es6': 'javascript', 'es2015': 'javascript',
+  'ts': 'typescript',
+  // Backend / frameworks
+  'springboot': 'spring boot', 'spring-boot': 'spring boot',
+  'asp net': 'asp.net', 'aspnet': 'asp.net', 'dotnet': '.net', 'dot net': '.net',
+  'rest apis': 'rest api', 'restful': 'rest api', 'restful api': 'rest api', 'restful apis': 'rest api',
+  // Databases
+  'postgres sql': 'postgresql', 'postgre': 'postgresql', 'pg': 'postgresql',
+  'mongo': 'mongodb', 'mongo db': 'mongodb',
+  'ms sql': 'sql', 'mssql': 'sql', 'tsql': 'sql', 't-sql': 'sql', 'plsql': 'sql', 'pl/sql': 'sql',
+  // Cloud / DevOps
+  'amazon web services': 'aws', 'aws cloud': 'aws',
+  'google cloud platform': 'gcp', 'google cloud': 'gcp',
+  'microsoft azure': 'azure',
+  'k8s': 'kubernetes', 'kube': 'kubernetes',
+  'github-actions': 'github actions', 'gh actions': 'github actions',
+  'gitlab-ci': 'gitlab ci', 'gitlabci': 'gitlab ci',
+  'cicd': 'ci/cd', 'ci cd': 'ci/cd', 'continuous integration': 'ci/cd', 'continuous delivery': 'ci/cd',
+  // Data / AI
+  'ml': 'machine learning', 'dl': 'deep learning',
+  'natural language processing': 'nlp',
+  'cv': 'computer vision',
+  'tensor flow': 'tensorflow',
+  'sci-kit learn': 'scikit-learn', 'sklearn': 'scikit-learn', 'scikit learn': 'scikit-learn',
+  'power-bi': 'power bi', 'power bi desktop': 'power bi',
+  // Languages
+  'c sharp': 'c#', 'csharp': 'c#',
+  'cpp': 'c++', 'c plus plus': 'c++',
+  'go lang': 'golang', 'go-lang': 'golang',
+  // Styling
+  'tailwindcss': 'tailwind', 'tailwind css': 'tailwind',
+  'material-ui': 'material ui', 'materialui': 'material ui',
+  // Tools
+  'github enterprise': 'github',
+  'atlassian jira': 'jira',
+  // Practices
+  'test driven development': 'tdd',
+  'behavior driven development': 'bdd',
+  'end to end testing': 'e2e', 'end-to-end': 'e2e',
+};
+
+// Sort longer phrases first so multi-word variants match before single tokens.
+const SYNONYM_KEYS = Object.keys(SYNONYMS).sort((a, b) => b.length - a.length);
+
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function applySynonyms(normalized: string): string {
+  let out = ' ' + normalized + ' ';
+  for (const key of SYNONYM_KEYS) {
+    const re = new RegExp(`(?<=[^a-z0-9+#./-])${escapeRegex(key)}(?=[^a-z0-9+#./-])`, 'g');
+    out = out.replace(re, SYNONYMS[key]);
+  }
+  return out.trim().replace(/\s+/g, ' ');
+}
+
 function tokens(text: string) {
-  return normalize(text).split(' ').filter(w => w && w.length > 2 && !STOPWORDS.has(w));
+  return applySynonyms(normalize(text)).split(' ').filter(w => w && w.length > 2 && !STOPWORDS.has(w));
 }
 
 function extractSkills(text: string): Set<string> {
-  const norm = ' ' + normalize(text) + ' ';
+  const norm = ' ' + applySynonyms(normalize(text)) + ' ';
   const found = new Set<string>();
   SKILL_DICT.forEach(skill => {
     if (norm.includes(' ' + skill + ' ')) found.add(skill);
