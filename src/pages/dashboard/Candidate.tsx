@@ -6,13 +6,14 @@ import { MatchRing } from "@/components/app/MatchRing";
 import { Roadmap } from "@/components/app/Roadmap";
 import { Button } from "@/components/ui/button";
 import { analyze, AnalysisResult, readFileAsText } from "@/lib/analyzer";
-import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen, FileText, AlertTriangle } from "lucide-react";
 
 export default function Candidate() {
   const [resume, setResume] = useState<File | null>(null);
   const [jd, setJd] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [parseInfo, setParseInfo] = useState<{ resumeChars: number; jdChars: number } | null>(null);
 
   useEffect(() => {
     if (!resume || !jd) return;
@@ -20,11 +21,13 @@ export default function Candidate() {
     (async () => {
       setLoading(true);
       setResult(null);
+      setParseInfo(null);
       const [r, j] = await Promise.all([readFileAsText(resume), readFileAsText(jd)]);
       // Small delay so animation feels intentional
       await new Promise(res => setTimeout(res, 700));
       if (cancelled) return;
       setResult(analyze(r, j));
+      setParseInfo({ resumeChars: r.trim().length, jdChars: j.trim().length });
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -127,6 +130,32 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="mt-12 space-y-6"
             >
+              {/* PARSE QUALITY BANNER */}
+              {parseInfo && (parseInfo.resumeChars < 200 || parseInfo.jdChars < 80) && (
+                <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4 flex gap-3">
+                  <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-foreground">Limited text extracted from your file{parseInfo.resumeChars < 200 && parseInfo.jdChars < 80 ? "s" : ""}</p>
+                    <p className="text-muted-foreground mt-1">
+                      We extracted {parseInfo.resumeChars} chars from the resume and {parseInfo.jdChars} chars from the JD.
+                      Scanned/image PDFs and legacy <code className="text-xs px-1 rounded bg-muted">.doc</code> files may not parse well — try uploading a text-based PDF, DOCX, or paste-as-TXT for best accuracy.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* PARSE INFO STRIP */}
+              {parseInfo && parseInfo.resumeChars >= 200 && parseInfo.jdChars >= 80 && (
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted">
+                    <FileText className="h-3 w-3" /> Resume: {parseInfo.resumeChars.toLocaleString()} chars · {result.resumeSkills.length} skills found
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted">
+                    <FileText className="h-3 w-3" /> JD: {parseInfo.jdChars.toLocaleString()} chars · {result.jdSkills.length} skills found
+                  </span>
+                </div>
+              )}
+
               {/* TOP CARDS */}
               <div className="grid md:grid-cols-3 gap-5">
                 <div className="md:col-span-1 rounded-2xl border border-border bg-gradient-card p-6 flex flex-col items-center shadow-soft">
