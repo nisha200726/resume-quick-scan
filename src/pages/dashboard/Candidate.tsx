@@ -6,13 +6,14 @@ import { MatchRing } from "@/components/app/MatchRing";
 import { Roadmap } from "@/components/app/Roadmap";
 import { Button } from "@/components/ui/button";
 import { analyze, AnalysisResult, readFileAsText } from "@/lib/analyzer";
-import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen, FileText, AlertTriangle } from "lucide-react";
 
 export default function Candidate() {
   const [resume, setResume] = useState<File | null>(null);
   const [jd, setJd] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [parseInfo, setParseInfo] = useState<{ resumeChars: number; jdChars: number } | null>(null);
 
   useEffect(() => {
     if (!resume || !jd) return;
@@ -20,11 +21,13 @@ export default function Candidate() {
     (async () => {
       setLoading(true);
       setResult(null);
+      setParseInfo(null);
       const [r, j] = await Promise.all([readFileAsText(resume), readFileAsText(jd)]);
       // Small delay so animation feels intentional
       await new Promise(res => setTimeout(res, 700));
       if (cancelled) return;
       setResult(analyze(r, j));
+      setParseInfo({ resumeChars: r.trim().length, jdChars: j.trim().length });
       setLoading(false);
     })();
     return () => { cancelled = true; };
