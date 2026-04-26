@@ -130,6 +130,32 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="mt-12 space-y-6"
             >
+              {/* PARSE QUALITY BANNER */}
+              {parseInfo && (parseInfo.resumeChars < 200 || parseInfo.jdChars < 80) && (
+                <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4 flex gap-3">
+                  <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-foreground">Limited text extracted from your file{parseInfo.resumeChars < 200 && parseInfo.jdChars < 80 ? "s" : ""}</p>
+                    <p className="text-muted-foreground mt-1">
+                      We extracted {parseInfo.resumeChars} chars from the resume and {parseInfo.jdChars} chars from the JD.
+                      Scanned/image PDFs and legacy <code className="text-xs px-1 rounded bg-muted">.doc</code> files may not parse well — try uploading a text-based PDF, DOCX, or paste-as-TXT for best accuracy.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* PARSE INFO STRIP */}
+              {parseInfo && parseInfo.resumeChars >= 200 && parseInfo.jdChars >= 80 && (
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted">
+                    <FileText className="h-3 w-3" /> Resume: {parseInfo.resumeChars.toLocaleString()} chars · {result.resumeSkills.length} skills found
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted">
+                    <FileText className="h-3 w-3" /> JD: {parseInfo.jdChars.toLocaleString()} chars · {result.jdSkills.length} skills found
+                  </span>
+                </div>
+              )}
+
               {/* TOP CARDS */}
               <div className="grid md:grid-cols-3 gap-5">
                 <div className="md:col-span-1 rounded-2xl border border-border bg-gradient-card p-6 flex flex-col items-center shadow-soft">
