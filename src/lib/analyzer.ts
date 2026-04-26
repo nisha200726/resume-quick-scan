@@ -86,22 +86,6 @@ function extractSkills(text: string): Set<string> {
   return found;
 }
 
-// Fallback: pull notable JD-only keywords (multi-occurrence, longer words) the resume doesn't mention
-function extractFallbackGaps(jdText: string, resumeText: string): string[] {
-  const rTok = new Set(tokens(resumeText));
-  const counts = new Map<string, number>();
-  for (const t of tokens(jdText)) {
-    if (t.length < 4) continue;
-    if (rTok.has(t)) continue;
-    counts.set(t, (counts.get(t) || 0) + 1);
-  }
-  // Even single-occurrence is okay if JD is short — sort by frequency then length
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
-    .slice(0, 10)
-    .map(([w]) => w);
-}
-
 // Pull JD-significant keywords (top words that look "topical") regardless of resume
 function extractJdKeywords(jdText: string): string[] {
   const counts = new Map<string, number>();
@@ -147,15 +131,10 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
   const matchedAll = [...requiredTerms].filter(t => rSkills.has(t) || rTokSet.has(t));
   const missingAll = [...requiredTerms].filter(t => !rSkills.has(t) && !rTokSet.has(t));
 
-  // Skill-only buckets for display
+  // Skill-only buckets for display, suggestions, and learning roadmap.
+  // Do not add generic unmatched JD words here — users should only see real skills.
   const matched = [...jSkills].filter(s => rSkills.has(s));
-  let missing = [...jSkills].filter(s => !rSkills.has(s));
-
-  // Always extend missing with fallback gaps so suggestions/roadmap are never empty
-  const fallback = extractFallbackGaps(jdText, resumeText);
-  for (const f of fallback) {
-    if (!missing.includes(f) && !rSkills.has(f) && !rTokSet.has(f)) missing.push(f);
-  }
+  const missing = [...jSkills].filter(s => !rSkills.has(s));
 
   // --- Scoring (robust, never collapses to 0 just because no dict skills detected) ---
   const overlap = jTok.filter(t => rTokSet.has(t)).length;
@@ -196,7 +175,7 @@ export function analyze(resumeText: string, jdText: string): AnalysisResult {
   if (missing.length > 0) feedback.push(`Add experience or projects related to: ${missing.slice(0, 3).join(', ')}.`);
   if (rSkills.size < 5) feedback.push('Your resume mentions few recognizable technical skills. Be specific about tools used.');
   if (suggested.some(s => s.resource)) feedback.push('Click any suggested skill below to open a free learning resource.');
-  if (jSkills.size === 0) feedback.push('No standard skills were detected in the JD — score is based on overall keyword and term coverage.');
+  if (jSkills.size === 0) feedback.push('No standard skills were detected in the JD — match score is based on overall keyword coverage, but skill gaps are shown only when real skills are detected.');
 
   return {
     matchPercent,
