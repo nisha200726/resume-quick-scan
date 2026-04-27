@@ -5,8 +5,32 @@ import { UploadCard } from "@/components/app/UploadCard";
 import { MatchRing } from "@/components/app/MatchRing";
 import { Roadmap } from "@/components/app/Roadmap";
 import { Button } from "@/components/ui/button";
-import { analyze, AnalysisResult, readFileAsText } from "@/lib/analyzer";
-import { Loader2, CheckCircle2, AlertCircle, Lightbulb, Download, TrendingUp, ExternalLink, BookOpen, FileText, AlertTriangle } from "lucide-react";
+import { readFileAsText } from "@/lib/analyzer";
+import api from "@/lib/api";
+import {
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Lightbulb,
+  Download,
+  TrendingUp,
+  ExternalLink,
+  BookOpen,
+  FileText,
+  AlertTriangle,
+} from "lucide-react";
+
+interface AnalysisResult {
+  matchPercent: number;
+  rankScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  suggestedSkills: { name: string; resource?: string }[];
+  jdSkills: string[];
+  resumeSkills: string[];
+  keywordOverlap: number;
+  feedback: string[];
+}
 
 export default function Candidate() {
   const [resume, setResume] = useState<File | null>(null);
@@ -23,14 +47,25 @@ export default function Candidate() {
       setResult(null);
       setParseInfo(null);
       const [r, j] = await Promise.all([readFileAsText(resume), readFileAsText(jd)]);
-      // Small delay so animation feels intentional
-      await new Promise(res => setTimeout(res, 700));
+      await new Promise((res) => setTimeout(res, 700));
       if (cancelled) return;
-      setResult(analyze(r, j));
+
+      try {
+        const res = await api.post("/analyze", {
+          resumeText: r,
+          jdText: j,
+        });
+        setResult(res.data.data);
+      } catch {
+        // fallback to no result
+      }
+
       setParseInfo({ resumeChars: r.trim().length, jdChars: j.trim().length });
       setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [resume, jd]);
 
   const downloadReport = () => {
@@ -43,21 +78,23 @@ Ranking Score: ${result.rankScore}/100
 Keyword Overlap: ${result.keywordOverlap}%
 
 Matched Skills (${result.matchedSkills.length}):
-${result.matchedSkills.map(s => '  ✓ ' + s).join('\n') || '  (none)'}
+${result.matchedSkills.map((s) => "  ✓ " + s).join("\n") || "  (none)"}
 
 Missing Skills (${result.missingSkills.length}):
-${result.missingSkills.map(s => '  ✗ ' + s).join('\n') || '  (none)'}
+${result.missingSkills.map((s) => "  ✗ " + s).join("\n") || "  (none)"}
 
 Suggested Skills to Learn:
-${result.suggestedSkills.map(s => '  → ' + s.name + (s.resource ? '  (' + s.resource + ')' : '')).join('\n') || '  (none)'}
+${result.suggestedSkills.map((s) => "  → " + s.name + (s.resource ? "  (" + s.resource + ")" : "")).join("\n") || "  (none)"}
 
 Feedback:
-${result.feedback.map(f => '  • ' + f).join('\n')}
+${result.feedback.map((f) => "  • " + f).join("\n")}
 `;
     const blob = new Blob([txt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "resumeiq-report.txt"; a.click();
+    a.href = url;
+    a.download = "resumeiq-report.txt";
+    a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -73,7 +110,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
           </p>
         </motion.div>
 
-        {/* DUAL UPLOAD */}
         <div className="grid md:grid-cols-2 gap-5 mt-10">
           <UploadCard
             label="Drop your resume"
@@ -91,10 +127,10 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
           />
         </div>
 
-        {/* STATE: empty */}
         {!resume || !jd ? (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             className="mt-12 rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center"
           >
             <div className="inline-flex h-12 w-12 rounded-full bg-accent items-center justify-center mb-4">
@@ -109,11 +145,12 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
           </motion.div>
         ) : null}
 
-        {/* LOADING */}
         <AnimatePresence>
           {loading && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
               className="mt-12 rounded-2xl border border-border bg-gradient-card p-10 text-center"
             >
               <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary-glow" />
@@ -123,19 +160,22 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
           )}
         </AnimatePresence>
 
-        {/* RESULTS */}
         <AnimatePresence>
           {result && !loading && (
             <motion.div
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
               className="mt-12 space-y-6"
             >
-              {/* PARSE QUALITY BANNER */}
               {parseInfo && (parseInfo.resumeChars < 200 || parseInfo.jdChars < 80) && (
                 <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4 flex gap-3">
                   <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                   <div className="text-sm">
-                    <p className="font-medium text-foreground">Limited text extracted from your file{parseInfo.resumeChars < 200 && parseInfo.jdChars < 80 ? "s" : ""}</p>
+                    <p className="font-medium text-foreground">
+                      Limited text extracted from your file
+                      {parseInfo.resumeChars < 200 && parseInfo.jdChars < 80 ? "s" : ""}
+                    </p>
                     <p className="text-muted-foreground mt-1">
                       We extracted {parseInfo.resumeChars} chars from the resume and {parseInfo.jdChars} chars from the JD.
                       Scanned/image PDFs and legacy <code className="text-xs px-1 rounded bg-muted">.doc</code> files may not parse well — try uploading a text-based PDF, DOCX, or paste-as-TXT for best accuracy.
@@ -144,7 +184,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 </div>
               )}
 
-              {/* PARSE INFO STRIP */}
               {parseInfo && parseInfo.resumeChars >= 200 && parseInfo.jdChars >= 80 && (
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted">
@@ -156,7 +195,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 </div>
               )}
 
-              {/* TOP CARDS */}
               <div className="grid md:grid-cols-3 gap-5">
                 <div className="md:col-span-1 rounded-2xl border border-border bg-gradient-card p-6 flex flex-col items-center shadow-soft">
                   <MatchRing value={result.matchPercent} label="Match" />
@@ -171,7 +209,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 </div>
               </div>
 
-              {/* SKILLS */}
               <div className="grid md:grid-cols-2 gap-5">
                 <SkillPanel
                   title="Matched skills"
@@ -189,7 +226,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 />
               </div>
 
-              {/* JD SKILL BARS */}
               <div className="rounded-2xl border border-border bg-gradient-card p-6 shadow-soft">
                 <h3 className="font-display font-semibold text-lg mb-4">Required skills coverage</h3>
                 <div className="space-y-3">
@@ -218,7 +254,6 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                 </div>
               </div>
 
-              {/* FEEDBACK */}
               <div className="rounded-2xl border border-border bg-gradient-card p-6 shadow-soft">
                 <div className="flex items-center gap-2 mb-3">
                   <Lightbulb className="h-5 w-5 text-primary-glow" />
@@ -239,7 +274,7 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                       <p className="text-sm font-medium">Suggested skills to learn next</p>
                     </div>
                     <div className="grid sm:grid-cols-2 gap-2">
-                      {result.suggestedSkills.map(s => (
+                      {result.suggestedSkills.map((s) =>
                         s.resource ? (
                           <a
                             key={s.name}
@@ -262,13 +297,12 @@ ${result.feedback.map(f => '  • ' + f).join('\n')}
                             <span className="text-xs text-muted-foreground">Add to resume</span>
                           </div>
                         )
-                      ))}
+                      )}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* LEARNING ROADMAP */}
               <Roadmap skills={result.suggestedSkills} />
 
               <div className="flex justify-end">
@@ -300,10 +334,23 @@ function StatCard({ label, value, hint, tone }: { label: string; value: string; 
   );
 }
 
-function SkillPanel({ title, icon, tone, skills, empty }: { title: string; icon: React.ReactNode; tone: "success" | "warning"; skills: string[]; empty: string }) {
-  const colors = tone === "success"
-    ? "bg-success/10 text-success border-success/20"
-    : "bg-warning/10 text-warning border-warning/20";
+function SkillPanel({
+  title,
+  icon,
+  tone,
+  skills,
+  empty,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  tone: "success" | "warning";
+  skills: string[];
+  empty: string;
+}) {
+  const colors =
+    tone === "success"
+      ? "bg-success/10 text-success border-success/20"
+      : "bg-warning/10 text-warning border-warning/20";
   return (
     <div className="rounded-2xl border border-border bg-gradient-card p-6 shadow-soft">
       <div className="flex items-center gap-2 mb-4">
@@ -316,7 +363,7 @@ function SkillPanel({ title, icon, tone, skills, empty }: { title: string; icon:
         <p className="text-sm text-muted-foreground">{empty}</p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {skills.map(s => (
+          {skills.map((s) => (
             <span key={s} className={`px-3 py-1 rounded-full border text-xs font-medium capitalize ${colors}`}>
               {s}
             </span>
@@ -326,3 +373,4 @@ function SkillPanel({ title, icon, tone, skills, empty }: { title: string; icon:
     </div>
   );
 }
+

@@ -1,50 +1,49 @@
+import api from "./api";
+
 export interface Job {
   id: string;
   title: string;
   company: string;
   location: string;
-  type: string; // Full-time, Part-time, Contract, Internship
+  type: string;
   description: string;
-  skills: string[]; // parsed from comma-separated input
+  skills: string[];
   createdAt: number;
 }
 
-const KEY = 'rss.jobs.v1';
-
-export function getJobs(): Job[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+export async function getJobs(): Promise<Job[]> {
+  const res = await api.get("/jobs");
+  return (res.data.data || []).map((j: any) => ({
+    ...j,
+    id: String(j.id),
+    skills: j.skills ? j.skills.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+    createdAt: j.createdAt ? new Date(j.createdAt).getTime() : Date.now(),
+  }));
 }
 
-export function saveJob(job: Omit<Job, 'id' | 'createdAt'>): Job {
-  const newJob: Job = {
+export async function saveJob(job: Omit<Job, "id" | "createdAt">): Promise<Job> {
+  const res = await api.post("/jobs", {
     ...job,
-    id:
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    createdAt: Date.now(),
+    skills: job.skills.join(","),
+  });
+  const j = res.data.data;
+  return {
+    ...j,
+    id: String(j.id),
+    skills: j.skills ? j.skills.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+    createdAt: j.createdAt ? new Date(j.createdAt).getTime() : Date.now(),
   };
-  const all = [newJob, ...getJobs()];
-  localStorage.setItem(KEY, JSON.stringify(all));
-  return newJob;
 }
 
-export function deleteJob(id: string) {
-  const all = getJobs().filter(j => j.id !== id);
-  localStorage.setItem(KEY, JSON.stringify(all));
+export async function deleteJob(id: string) {
+  await api.delete(`/jobs/${id}`);
 }
 
 export function parseSkills(input: string): string[] {
   return input
     .split(/[,\n]/)
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 30);
 }
+
