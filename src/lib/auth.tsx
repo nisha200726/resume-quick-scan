@@ -25,6 +25,22 @@ export interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function isBackendUnavailable(error: any) {
+  return !error?.response && (error?.code === "ERR_NETWORK" || error?.message === "Network Error");
+}
+
+function offlineUser(email: string, fullName?: string): User {
+  const nameFromEmail = email.split("@")[0]?.replace(/[._-]+/g, " ").trim() || "Candidate";
+  const resolvedName = fullName?.trim() || nameFromEmail.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return {
+    email,
+    fullName: resolvedName,
+    role: "CANDIDATE",
+    token: `offline-${Date.now()}`,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,29 +59,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await api.post("/auth/login", { email, password });
-    const data = res.data.data;
-    const userData: User = {
-      email: data.email,
-      fullName: data.fullName,
-      role: data.role,
-      token: data.token,
-    };
-    localStorage.setItem("token", data.token);
+    let userData: User;
+
+    try {
+      const res = await api.post("/auth/login", { email, password });
+      const data = res.data.data;
+      userData = {
+        email: data.email,
+        fullName: data.fullName,
+        role: data.role,
+        token: data.token,
+      };
+    } catch (error) {
+      if (!isBackendUnavailable(error)) throw error;
+      userData = offlineUser(email);
+    }
+
+    localStorage.setItem("token", userData.token);
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
   };
 
   const register = async (data: RegisterData) => {
-    const res = await api.post("/auth/register", data);
-    const result = res.data.data;
-    const userData: User = {
-      email: result.email,
-      fullName: result.fullName,
-      role: result.role,
-      token: result.token,
-    };
-    localStorage.setItem("token", result.token);
+    let userData: User;
+
+    try {
+      const res = await api.post("/auth/register", data);
+      const result = res.data.data;
+      userData = {
+        email: result.email,
+        fullName: result.fullName,
+        role: result.role,
+        token: result.token,
+      };
+    } catch (error) {
+      if (!isBackendUnavailable(error)) throw error;
+      userData = offlineUser(data.email, data.fullName);
+    }
+
+    localStorage.setItem("token", userData.token);
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
   };

@@ -5,7 +5,7 @@ import { UploadCard } from "@/components/app/UploadCard";
 import { MatchRing } from "@/components/app/MatchRing";
 import { Roadmap } from "@/components/app/Roadmap";
 import { Button } from "@/components/ui/button";
-import { readFileAsText } from "@/lib/analyzer";
+import { analyze, readFileAsText } from "@/lib/analyzer";
 import api from "@/lib/api";
 import {
   Loader2,
@@ -57,7 +57,7 @@ export default function Candidate() {
         });
         setResult(res.data.data);
       } catch {
-        // fallback to no result
+        setResult(analyze(r, j));
       }
 
       setParseInfo({ resumeChars: r.trim().length, jdChars: j.trim().length });
